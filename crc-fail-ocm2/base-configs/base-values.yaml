@@ -1,0 +1,10 @@
+# Thin spoke overrides — chart defaults remain the rich source of knobs.
+---
+karpenter:
+  enabled: false
+amqStreams:
+  enabled: false
+workers:
+  count: 2
+  nodePools: []
+  # Leave nodePools empty to use chart defaults scaled from count; populate for multi-pool overrides.
