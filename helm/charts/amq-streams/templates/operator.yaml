@@ -1,0 +1,26 @@
+{{- if and .Values.enabled .Values.operator.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: amq-streams-cluster-operator
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: amq-streams
+spec:
+  replicas: {{ .Values.operator.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: amq-streams
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: amq-streams
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      containers:
+        - name: operator
+          image: "{{ .Values.operator.image.repository }}:{{ .Values.operator.image.tag }}"
+          imagePullPolicy: {{ .Values.operator.image.pullPolicy }}
+          resources:
+            {{- toYaml .Values.operator.resources | nindent 12 }}
+{{- end }}

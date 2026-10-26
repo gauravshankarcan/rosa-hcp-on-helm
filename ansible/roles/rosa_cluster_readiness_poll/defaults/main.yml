@@ -1,0 +1,9 @@
+---
+cluster_name: ""
+rosa_readiness_timeout_minutes: 90
+rosa_readiness_poll_delay_seconds: 60
+# Skip poll for local dry-runs that only write git. Also auto-skips when
+# rosa_capi_available is false unless rosa_force_readiness_poll=true.
+rosa_skip_readiness_poll: false
+rosa_force_readiness_poll: false
+rosa_capi_available: true

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: amq-streams
+description: AMQ Streams feature chart for provisioned ROSA HCP spokes (enable-flag driven)
+type: application
+version: 0.1.0
+appVersion: "2.7.0"

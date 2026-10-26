@@ -1,0 +1,157 @@
+---
+- name: "STEP capi | Fetch MulticlusterEngine {{ rosa_mce_name }}"
+  kubernetes.core.k8s_info:
+    api_version: multicluster.openshift.io/v1
+    kind: MultiClusterEngine
+    name: "{{ rosa_mce_name }}"
+  register: rosa_mce_info
+  failed_when: rosa_mce_info.resources | length == 0
+
+- name: "STEP capi | Detect enabled Hypershift / CAPI components"
+  ansible.builtin.set_fact:
+    rosa_mce_components: "{{ rosa_mce_info.resources[0].spec.overrides.components | default([]) }}"
+    rosa_hypershift_enabled: >-
+      {{
+        rosa_mce_info.resources[0].spec.overrides.components | default([])
+        | selectattr('name', 'equalto', 'hypershift')
+        | selectattr('enabled')
+        | list | length > 0
+      }}
+    rosa_cluster_api_enabled: >-
+      {{
+        rosa_mce_info.resources[0].spec.overrides.components | default([])
+        | selectattr('name', 'equalto', 'cluster-api')
+        | selectattr('enabled')
+        | list | length > 0
+      }}
+
+- name: "STEP capi | Decide whether to disable Hypershift"
+  ansible.builtin.set_fact:
+    rosa_disable_hypershift: "{{ (rosa_force_disable_hypershift | bool) and not (rosa_preserve_hypershift | bool) }}"
+
+- name: "STEP capi | Skip enable when Hypershift exclusivity would break existing HCPs"
+  when:
+    - rosa_hypershift_enabled | bool
+    - rosa_preserve_hypershift | bool
+    - not (rosa_disable_hypershift | bool)
+    - rosa_capi_skip_on_hypershift_conflict | bool
+    - not (rosa_cluster_api_enabled | bool)
+  block:
+    - name: "STEP capi | Record skip (CAPI unavailable on this hub)"
+      ansible.builtin.set_fact:
+        rosa_capi_available: false
+        rosa_capi_skipped_reason: >-
+          MulticlusterEngine forbids enabling cluster-api alongside hypershift.
+          Hub preserves Hypershift (existing HostedClusters). Use a dedicated
+          CAPI hub or set rosa_force_disable_hypershift=true with
+          rosa_preserve_hypershift=false (destructive to HCP workloads).
+
+    - name: "STEP capi | Warn and continue without enabling CAPI"
+      ansible.builtin.debug:
+        msg: "STEP capi SKIPPED — {{ rosa_capi_skipped_reason }}"
+
+- name: "STEP capi | Enable/verify CAPI path"
+  when: not (
+      (rosa_hypershift_enabled | bool)
+      and (rosa_preserve_hypershift | bool)
+      and not (rosa_disable_hypershift | bool)
+      and (rosa_capi_skip_on_hypershift_conflict | bool)
+      and not (rosa_cluster_api_enabled | bool)
+    )
+  block:
+    - name: "STEP capi | Build desired component toggles"
+      ansible.builtin.set_fact:
+        rosa_capi_desired_components: "{{ rosa_capi_component_list }}"
+      vars:
+        rosa_capi_component_list: >-
+          {{
+            [
+              {'name': 'cluster-api', 'enabled': true, 'configOverrides': {}},
+              {'name': 'cluster-api-provider-aws', 'enabled': true, 'configOverrides': {}}
+            ]
+            + (
+              [
+                {'name': 'hypershift', 'enabled': false, 'configOverrides': {}},
+                {'name': 'hypershift-local-hosting', 'enabled': false, 'configOverrides': {}}
+              ] if (rosa_disable_hypershift | bool) else []
+            )
+          }}
+
+    - name: "STEP capi | Compute merged components list"
+      ansible.builtin.set_fact:
+        rosa_mce_merged_components: >-
+          {{
+            (
+              (rosa_mce_info.resources[0].spec.overrides.components | default([]))
+              | rejectattr('name', 'in', (rosa_capi_desired_components | map(attribute='name') | list))
+              | list
+            )
+            + rosa_capi_desired_components
+          }}
+
+    - name: "STEP capi | Apply MultiClusterEngine component toggles"
+      kubernetes.core.k8s:
+        state: present
+        merge_type: merge
+        definition:
+          apiVersion: multicluster.openshift.io/v1
+          kind: MultiClusterEngine
+          metadata:
+            name: "{{ rosa_mce_name }}"
+          spec:
+            overrides:
+              components: "{{ rosa_mce_merged_components }}"
+
+    - name: "STEP capi | Enable ClusterImporter / ManagedClusterAutoApproval"
+      kubernetes.core.k8s:
+        state: present
+        merge_type: merge
+        definition:
+          apiVersion: operator.open-cluster-management.io/v1
+          kind: ClusterManager
+          metadata:
+            name: "{{ rosa_cluster_manager_name }}"
+          spec:
+            registrationConfiguration:
+              featureGates:
+                - feature: ClusterImporter
+                  mode: Enable
+                - feature: ManagedClusterAutoApproval
+                  mode: Enable
+              autoApproveUsers:
+                - system:serviceaccount:multicluster-engine:agent-registration-bootstrap
+      failed_when: false
+
+    - name: "STEP capi | Ensure CAPI registration ClusterRoleBinding"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: cluster-manager-registration-capi
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: capi-operator-manager-role
+          subjects:
+            - kind: ServiceAccount
+              name: registration-controller-sa
+              namespace: open-cluster-management-hub
+      failed_when: false
+
+    - name: "STEP capi | Verify controllers"
+      ansible.builtin.include_tasks: verify.yml
+
+    - name: "STEP capi | Mark available"
+      ansible.builtin.set_fact:
+        rosa_capi_available: true
+
+- name: "STEP capi | Default rosa_capi_available when already set by skip"
+  when: rosa_capi_available is not defined
+  ansible.builtin.set_fact:
+    rosa_capi_available: "{{ rosa_cluster_api_enabled | bool }}"
+
+- name: "STEP capi | Completed"
+  ansible.builtin.debug:
+    msg: "STEP capi done (rosa_capi_available={{ rosa_capi_available }})"

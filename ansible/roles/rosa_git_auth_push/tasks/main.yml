@@ -1,0 +1,70 @@
+---
+- name: "STEP git-push | Skip when rosa_git_push is false"
+  when: not (rosa_git_push | bool)
+  ansible.builtin.debug:
+    msg: "STEP git-push SKIPPED (rosa_git_push=false)"
+
+- name: "STEP git-push | Authenticated push with GIT_TOKEN"
+  when: rosa_git_push | bool
+  block:
+    - name: "STEP git-push | Require GIT_TOKEN in environment"
+      ansible.builtin.assert:
+        that:
+          - lookup('env', 'GIT_TOKEN') | length > 0
+        fail_msg: >-
+          STEP git-push FAILED: GIT_TOKEN is empty. Add export GIT_TOKEN=... to ./env
+          (gitignored) so Ansible can push cluster artifacts for Argo CD.
+
+    - name: "STEP git-push | Resolve remote URL"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        if [ -n "{{ rosa_git_repo_url }}" ]; then
+          echo "{{ rosa_git_repo_url }}"
+        else
+          git -C "{{ rosa_git_repo_path | realpath }}" remote get-url origin
+        fi
+      register: rosa_git_remote_raw
+      changed_when: false
+
+    - name: "STEP git-push | Normalize to HTTPS remote (strip embedded creds; map SSH)"
+      ansible.builtin.set_fact:
+        rosa_git_remote_clean: >-
+          {{
+            rosa_git_remote_raw.stdout | trim
+            | regex_replace('^git@github\\.com:', 'https://github.com/')
+            | regex_replace('^ssh://git@github\\.com/', 'https://github.com/')
+            | regex_replace('^https://[^@]+@', 'https://')
+          }}
+
+    - name: "STEP git-push | Require HTTPS remote for token auth"
+      ansible.builtin.assert:
+        that:
+          - rosa_git_remote_clean is match('^https://')
+        fail_msg: >-
+          STEP git-push FAILED: remote '{{ rosa_git_remote_clean }}' is not HTTPS.
+          Set ROSA_GIT_REPO_URL to an https:// GitHub URL when using GIT_TOKEN.
+
+    - name: "STEP git-push | Build tokenized push URL (not logged)"
+      ansible.builtin.set_fact:
+        rosa_git_push_url: "{{ rosa_git_remote_clean | regex_replace('^https://', 'https://x-access-token:' ~ lookup('env', 'GIT_TOKEN') ~ '@') }}"
+      no_log: true
+
+    - name: "STEP git-push | Resolve branch"
+      ansible.builtin.command:
+        cmd: git rev-parse --abbrev-ref HEAD
+        chdir: "{{ rosa_git_repo_path | realpath }}"
+      register: rosa_git_head
+      changed_when: false
+
+    - name: "STEP git-push | Push HEAD to origin"
+      ansible.builtin.command:
+        cmd: >-
+          git push "{{ rosa_git_push_url }}"
+          "HEAD:refs/heads/{{ rosa_git_branch | default(rosa_git_head.stdout) }}"
+        chdir: "{{ rosa_git_repo_path | realpath }}"
+      no_log: true
+      register: rosa_git_push_result
+
+    - name: "STEP git-push | Completed"
+      ansible.builtin.debug:
+        msg: "STEP git-push OK (remote updated; token not logged)"

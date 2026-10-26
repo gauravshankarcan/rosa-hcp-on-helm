@@ -1,0 +1,69 @@
+---
+- name: "STEP ready | Compute effective skip"
+  ansible.builtin.set_fact:
+    rosa_ready_skip_effective: >-
+      {{
+        (rosa_skip_readiness_poll | bool)
+        or (rosa_apply_capi_ocm_missing | default(false) | bool)
+        or (
+          not (rosa_force_readiness_poll | bool)
+          and not (rosa_capi_available | default(true) | bool)
+        )
+      }}
+
+- name: "STEP ready | Skip readiness poll when requested or CAPI/OCM unavailable"
+  when: rosa_ready_skip_effective | bool
+  ansible.builtin.debug:
+    msg: >-
+      STEP ready SKIPPED (effective={{ rosa_ready_skip_effective }},
+      skip_flag={{ rosa_skip_readiness_poll }},
+      rosa_capi_available={{ rosa_capi_available | default(true) }},
+      ocm_missing={{ rosa_apply_capi_ocm_missing | default(false) }},
+      force={{ rosa_force_readiness_poll }})
+
+- name: "STEP ready | Bounded poll for ManagedCluster Available"
+  when: not (rosa_ready_skip_effective | bool)
+  block:
+    - name: "STEP ready | Compute retries from timeout"
+      ansible.builtin.set_fact:
+        rosa_readiness_retries: "{{ ((rosa_readiness_timeout_minutes | int) * 60 / (rosa_readiness_poll_delay_seconds | int)) | int }}"
+
+    - name: "STEP ready | Wait until ManagedCluster {{ cluster_name }} is Available"
+      kubernetes.core.k8s_info:
+        api_version: cluster.open-cluster-management.io/v1
+        kind: ManagedCluster
+        name: "{{ cluster_name }}"
+      register: rosa_mc
+      until:
+        - rosa_mc.resources | length > 0
+        - >
+          rosa_mc.resources[0].status.conditions
+          | selectattr('type', 'equalto', 'ManagedClusterConditionAvailable')
+          | selectattr('status', 'equalto', 'True')
+          | list
+          | length > 0
+      retries: "{{ rosa_readiness_retries | int }}"
+      delay: "{{ rosa_readiness_poll_delay_seconds | int }}"
+      ignore_errors: true
+
+    - name: "STEP ready | Fail with clear timeout if not Ready"
+      when: >
+        rosa_mc is failed
+        or rosa_mc.resources | length == 0
+        or (
+          rosa_mc.resources[0].status.conditions
+          | selectattr('type', 'equalto', 'ManagedClusterConditionAvailable')
+          | selectattr('status', 'equalto', 'True')
+          | list
+          | length == 0
+        )
+      ansible.builtin.fail:
+        msg: >-
+          STEP ready FAILED: Cluster '{{ cluster_name }}' did not become Available
+          within {{ rosa_readiness_timeout_minutes }} minutes after git commit.
+          Artifacts may remain; re-run is idempotent. Bring-up may still continue
+          asynchronously on the hub.
+
+    - name: "STEP ready | Completed"
+      ansible.builtin.debug:
+        msg: "STEP ready OK (ManagedCluster {{ cluster_name }} Available)"

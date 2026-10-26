@@ -1,0 +1,107 @@
+---
+- name: "STEP git | Validate provision inputs"
+  ansible.builtin.assert:
+    that:
+      - cluster_name is defined and (cluster_name | length > 0)
+      - cluster_type == 'hcp'
+      - node_count | int >= 1
+      - ocp_version in rosa_allowed_ocp_versions
+      - aws_account_id | length > 0
+      - (feature_flags | default([])) | difference(rosa_allowed_feature_flags) | length == 0
+    fail_msg: >-
+      STEP git FAILED: Invalid survey inputs. v1 allows cluster_type=hcp only;
+      ocp_version in {{ rosa_allowed_ocp_versions }}; feature_flags subset of
+      {{ rosa_allowed_feature_flags }}; node_count >= 1.
+
+- name: "STEP git | Resolve artifact paths (this cluster only)"
+  ansible.builtin.set_fact:
+    rosa_cluster_root: "{{ rosa_git_repo_path | realpath }}/{{ cluster_name }}"
+    rosa_argo_cluster_dir: "{{ rosa_git_repo_path | realpath }}/argo/clusters/{{ cluster_name }}"
+    rosa_base_values_path: "{{ rosa_git_repo_path | realpath }}/{{ cluster_name }}/base-values.yaml"
+    rosa_base_configs_path: "{{ rosa_git_repo_path | realpath }}/{{ cluster_name }}/base-configs/base-values.yaml"
+    rosa_argo_app_path: "{{ rosa_git_repo_path | realpath }}/argo/clusters/{{ cluster_name }}/application.yaml"
+
+- name: "STEP git | Detect existing artifacts for name conflict"
+  ansible.builtin.stat:
+    path: "{{ rosa_base_values_path }}"
+  register: rosa_existing_base_values
+
+- name: "STEP git | Fail closed on name conflict without force_update"
+  when:
+    - rosa_existing_base_values.stat.exists
+    - not (force_update | bool)
+  ansible.builtin.fail:
+    msg: >-
+      STEP git FAILED: Cluster name '{{ cluster_name }}' already exists and
+      force_update is false. Re-run with force_update=true to reconcile this
+      cluster only, or choose a new name.
+
+- name: "STEP git | Ensure cluster directories exist"
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ rosa_cluster_root }}"
+    - "{{ rosa_cluster_root }}/base-configs"
+    - "{{ rosa_argo_cluster_dir }}"
+
+- name: "STEP git | Render deploy base-values.yaml"
+  ansible.builtin.template:
+    src: base-values.yaml.j2
+    dest: "{{ rosa_base_values_path }}"
+    mode: "0644"
+
+- name: "STEP git | Render thin spoke base-configs/base-values.yaml"
+  ansible.builtin.template:
+    src: base-configs-values.yaml.j2
+    dest: "{{ rosa_base_configs_path }}"
+    mode: "0644"
+
+- name: "STEP git | Render dedicated Argo Application (no sibling edits)"
+  ansible.builtin.template:
+    src: application.yaml.j2
+    dest: "{{ rosa_argo_app_path }}"
+    mode: "0644"
+
+- name: "STEP git | Stage and commit only this cluster's paths"
+  when: rosa_git_commit | bool
+  block:
+    - name: "STEP git | git add cluster paths"
+      ansible.builtin.command:
+        cmd: git add -- "{{ cluster_name }}" "argo/clusters/{{ cluster_name }}"
+        chdir: "{{ rosa_git_repo_path | realpath }}"
+      register: rosa_git_add
+      changed_when: true
+
+    - name: "STEP git | Detect staged changes"
+      ansible.builtin.command:
+        cmd: git diff --cached --quiet
+        chdir: "{{ rosa_git_repo_path | realpath }}"
+      register: rosa_git_diff
+      failed_when: false
+      changed_when: false
+
+    - name: "STEP git | Commit artifacts"
+      when: rosa_git_diff.rc != 0
+      ansible.builtin.command:
+        cmd: >-
+          git commit -m "feat(rosa): provision artifacts for {{ cluster_name }} (hcp {{ ocp_version }})"
+        chdir: "{{ rosa_git_repo_path | realpath }}"
+      environment:
+        GIT_AUTHOR_NAME: "rosa-hcp-on-helm"
+        GIT_AUTHOR_EMAIL: "rosa-hcp-on-helm@local"
+        GIT_COMMITTER_NAME: "rosa-hcp-on-helm"
+        GIT_COMMITTER_EMAIL: "rosa-hcp-on-helm@local"
+      register: rosa_git_commit_result
+
+    - name: "STEP git | Authenticated push when enabled and changes committed"
+      when:
+        - rosa_git_push | bool
+        - rosa_git_diff.rc != 0
+      ansible.builtin.include_role:
+        name: rosa_git_auth_push
+
+- name: "STEP git | Completed"
+  ansible.builtin.debug:
+    msg: "STEP git OK (cluster={{ cluster_name }}, force_update={{ force_update }})"

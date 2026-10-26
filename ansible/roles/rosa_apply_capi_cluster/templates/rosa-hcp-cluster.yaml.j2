@@ -1,0 +1,85 @@
+# CAPI ROSA HCP bundle (v1beta2) — requires OCM credentials secret + AWS ROSA roles/OIDC/subnets.
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: Cluster
+metadata:
+  name: {{ cluster_name }}
+  namespace: {{ rosa_capi_namespace }}
+  labels:
+    {{ rosa_isolation_label_managed }}: "true"
+    {{ rosa_isolation_label_cluster }}: "{{ cluster_name }}"
+spec:
+  clusterNetwork:
+    pods:
+      cidrBlocks:
+        - 10.128.0.0/14
+    services:
+      cidrBlocks:
+        - 172.30.0.0/16
+  controlPlaneRef:
+    apiVersion: controlplane.cluster.x-k8s.io/v1beta2
+    kind: ROSAControlPlane
+    name: {{ cluster_name }}-cp
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
+    kind: ROSACluster
+    name: {{ cluster_name }}-infra
+---
+apiVersion: controlplane.cluster.x-k8s.io/v1beta2
+kind: ROSAControlPlane
+metadata:
+  name: {{ cluster_name }}-cp
+  namespace: {{ rosa_capi_namespace }}
+  labels:
+    {{ rosa_isolation_label_managed }}: "true"
+    {{ rosa_isolation_label_cluster }}: "{{ cluster_name }}"
+spec:
+  rosaClusterName: {{ cluster_name }}
+  domainPrefix: {{ cluster_name[:15] | replace('_','') }}
+  version: "{{ ocp_version }}"
+  region: {{ rosa_aws_region }}
+  channelGroup: stable
+  endpointAccess: Public
+  credentialsSecretRef:
+    name: {{ rosa_ocm_secret_name | default('rosa-creds-secret') }}
+  identityRef:
+    kind: AWSClusterControllerIdentity
+    name: default
+{% if rosa_oidc_config_id | length > 0 %}
+  oidcID: {{ rosa_oidc_config_id }}
+{% endif %}
+{% if rosa_installer_role_arn | length > 0 %}
+  installerRoleARN: {{ rosa_installer_role_arn }}
+  rolesRef:
+    installerRoleARN: {{ rosa_installer_role_arn }}
+    supportRoleARN: {{ rosa_support_role_arn }}
+    workerRoleARN: {{ rosa_worker_role_arn }}
+    controlPlaneOperatorARN: {{ rosa_control_plane_operator_arn | default(rosa_installer_role_arn) }}
+{% endif %}
+{% if (rosa_subnet_ids | default([])) | length > 0 %}
+  subnets:
+{% for s in rosa_subnet_ids %}
+    - {{ s }}
+{% endfor %}
+{% endif %}
+{% if (rosa_availability_zones | default([])) | length > 0 %}
+  availabilityZones:
+{% for z in rosa_availability_zones %}
+    - {{ z }}
+{% endfor %}
+{% endif %}
+  network:
+    machineCIDR: {{ rosa_machine_cidr | default('10.0.0.0/16') }}
+    networkType: OVNKubernetes
+  defaultMachinePoolSpec:
+    instanceType: {{ rosa_instance_type | default('m5.xlarge') }}
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
+kind: ROSACluster
+metadata:
+  name: {{ cluster_name }}-infra
+  namespace: {{ rosa_capi_namespace }}
+  labels:
+    {{ rosa_isolation_label_managed }}: "true"
+    {{ rosa_isolation_label_cluster }}: "{{ cluster_name }}"
+spec: {}

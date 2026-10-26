@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: rosa-{{ cluster_name }}
+  namespace: openshift-gitops
+  labels:
+    {{ rosa_isolation_label_managed }}: "true"
+    {{ rosa_isolation_label_cluster }}: "{{ cluster_name }}"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: {{ rosa_git_repo_url }}
+    targetRevision: {{ rosa_git_branch }}
+    path: {{ cluster_name }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: open-cluster-management
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

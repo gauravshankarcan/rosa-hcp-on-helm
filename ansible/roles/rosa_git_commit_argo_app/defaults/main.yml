@@ -1,0 +1,24 @@
+---
+cluster_name: ""
+cluster_type: "hcp"
+node_count: 3
+feature_flags: []
+ocp_version: "4.20"
+aws_account_id: ""
+force_update: false
+rosa_git_repo_path: "{{ playbook_dir }}/../.."
+rosa_git_commit: true
+# Push when GIT_TOKEN is present (override with -e rosa_git_push=false)
+rosa_git_push: "{{ (lookup('env', 'GIT_TOKEN') | default('', true) | length) > 0 }}"
+rosa_git_repo_url: "{{ lookup('env', 'ROSA_GIT_REPO_URL') | default('https://github.com/gauravshankarcan/rosa-hcp-on-helm.git', true) }}"
+rosa_git_branch: "{{ lookup('env', 'ROSA_GIT_BRANCH') | default('main', true) }}"
+rosa_isolation_label_managed: "rosa-hcp-on-helm/managed"
+rosa_isolation_label_cluster: "rosa-hcp-on-helm/cluster"
+rosa_aws_region: "us-east-1"
+rosa_allowed_feature_flags:
+  - karpenter
+  - amq-stream
+rosa_allowed_ocp_versions:
+  - "4.20"
+  - "4.21"
+  - "4.22"

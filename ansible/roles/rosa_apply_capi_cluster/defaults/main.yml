@@ -1,0 +1,20 @@
+---
+cluster_name: ""
+ocp_version: "4.20"
+aws_account_id: ""
+node_count: 3
+rosa_aws_region: "us-east-1"
+rosa_capi_namespace: "default"
+rosa_isolation_label_managed: "rosa-hcp-on-helm/managed"
+rosa_isolation_label_cluster: "rosa-hcp-on-helm/cluster"
+rosa_oidc_config_id: ""
+rosa_installer_role_arn: ""
+rosa_support_role_arn: ""
+rosa_worker_role_arn: ""
+rosa_apply_capi_cluster: true
+# Soft-skip when CAPI unavailable, OCM secret missing, or apply rejected
+rosa_apply_capi_soft_skip: true
+rosa_capi_available: true
+rosa_ocm_secret_name: "rosa-creds-secret"
+rosa_ocm_secret_namespace: "multicluster-engine"
+rosa_require_ocm_secret: true

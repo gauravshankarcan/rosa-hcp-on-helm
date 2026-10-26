@@ -1,0 +1,18 @@
+---
+# Dedicated deprovision — requires confirm_cluster_name == cluster_name.
+- name: Deprovision ROSA HCP cluster
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    rosa_git_repo_path: "{{ playbook_dir }}/../.."
+  pre_tasks:
+    - name: "PRE | Require hub login context"
+      ansible.builtin.assert:
+        that:
+          - lookup('env', 'KUBECONFIG') | length > 0 or lookup('env', 'OCP_CENTRAL_SERVER') | length > 0
+        fail_msg: "Source ./env and run scripts/hub-login.sh (or set KUBECONFIG) before deprovision."
+
+  roles:
+    - role: rosa_deprovision_cluster
+    - role: rosa_git_remove_artifacts

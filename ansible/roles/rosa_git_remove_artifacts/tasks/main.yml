@@ -1,0 +1,67 @@
+---
+- name: "STEP git-rm | Validate cluster_name"
+  ansible.builtin.assert:
+    that:
+      - cluster_name is defined and (cluster_name | length > 0)
+      - cluster_name != '.'
+      - cluster_name != '..'
+      - "('/' not in cluster_name)"
+    fail_msg: "STEP git-rm FAILED: refusing unsafe cluster_name '{{ cluster_name }}'"
+
+- name: "STEP git-rm | Resolve paths for this cluster only"
+  ansible.builtin.set_fact:
+    rosa_rm_cluster_dir: "{{ rosa_git_repo_path | realpath }}/{{ cluster_name }}"
+    rosa_rm_argo_dir: "{{ rosa_git_repo_path | realpath }}/argo/clusters/{{ cluster_name }}"
+
+- name: "STEP git-rm | Remove cluster value tree"
+  ansible.builtin.file:
+    path: "{{ rosa_rm_cluster_dir }}"
+    state: absent
+
+- name: "STEP git-rm | Remove dedicated Argo app directory"
+  ansible.builtin.file:
+    path: "{{ rosa_rm_argo_dir }}"
+    state: absent
+
+- name: "STEP git-rm | Commit removal when enabled"
+  when: rosa_git_commit | bool
+  block:
+    - name: "STEP git-rm | git add deletions"
+      ansible.builtin.command:
+        cmd: git add -A -- "{{ cluster_name }}" "argo/clusters/{{ cluster_name }}"
+        chdir: "{{ rosa_git_repo_path | realpath }}"
+      failed_when: false
+
+    - name: "STEP git-rm | Detect staged changes"
+      ansible.builtin.command:
+        cmd: git diff --cached --quiet
+        chdir: "{{ rosa_git_repo_path | realpath }}"
+      register: rosa_git_rm_diff
+      failed_when: false
+      changed_when: false
+
+    - name: "STEP git-rm | Commit"
+      when: rosa_git_rm_diff.rc != 0
+      ansible.builtin.command:
+        argv:
+          - git
+          - commit
+          - -m
+          - "chore(rosa): remove artifacts for {{ cluster_name }}"
+        chdir: "{{ rosa_git_repo_path | realpath }}"
+      environment:
+        GIT_AUTHOR_NAME: "rosa-hcp-on-helm"
+        GIT_AUTHOR_EMAIL: "rosa-hcp-on-helm@local"
+        GIT_COMMITTER_NAME: "rosa-hcp-on-helm"
+        GIT_COMMITTER_EMAIL: "rosa-hcp-on-helm@local"
+
+    - name: "STEP git-rm | Authenticated push when enabled and changes committed"
+      when:
+        - rosa_git_push | bool
+        - rosa_git_rm_diff.rc != 0
+      ansible.builtin.include_role:
+        name: rosa_git_auth_push
+
+- name: "STEP git-rm | Completed"
+  ansible.builtin.debug:
+    msg: "STEP git-rm OK (removed artifacts for {{ cluster_name }} only)"

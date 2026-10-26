@@ -1,0 +1,7 @@
+---
+cluster_name: ""
+rosa_git_repo_path: "{{ playbook_dir }}/../.."
+rosa_git_commit: true
+rosa_git_push: "{{ (lookup('env', 'GIT_TOKEN') | default('', true) | length) > 0 }}"
+rosa_git_repo_url: "{{ lookup('env', 'ROSA_GIT_REPO_URL') | default('https://github.com/gauravshankarcan/rosa-hcp-on-helm.git', true) }}"
+rosa_git_branch: "{{ lookup('env', 'ROSA_GIT_BRANCH') | default('main', true) }}"

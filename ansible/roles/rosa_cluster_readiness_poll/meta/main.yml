@@ -1,0 +1,7 @@
+---
+galaxy_info:
+  role_name: rosa_cluster_readiness_poll
+  description: Bounded wait for ManagedCluster/ROSA Ready after git commit
+  license: Apache-2.0
+  min_ansible_version: "2.15"
+dependencies: []

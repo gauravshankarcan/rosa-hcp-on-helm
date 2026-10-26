@@ -1,0 +1,98 @@
+---
+- name: "STEP aws | Validate aws_account_id"
+  ansible.builtin.assert:
+    that:
+      - aws_account_id is defined
+      - aws_account_id | length > 0
+    fail_msg: "STEP aws FAILED: aws_account_id is required"
+
+- name: "STEP aws | Set secret name for account"
+  ansible.builtin.set_fact:
+    rosa_aws_secret_name: "{{ rosa_aws_secret_name_prefix }}{{ aws_account_id }}"
+
+- name: "STEP aws | Load AWS credentials from hub secret (never from git)"
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Secret
+    name: "{{ rosa_aws_secret_name }}"
+    namespace: "{{ rosa_hub_secrets_namespace }}"
+  register: rosa_aws_secret
+
+- name: "STEP aws | Fail if secret missing"
+  ansible.builtin.assert:
+    that:
+      - rosa_aws_secret.resources | length > 0
+    fail_msg: >-
+      STEP aws FAILED: {{ rosa_aws_secret_name }} missing in
+      {{ rosa_hub_secrets_namespace }}. Create Secret with keys
+      aws_access_key_id and aws_secret_access_key (and optional region).
+
+- name: "STEP aws | Decode credential keys from secret"
+  ansible.builtin.set_fact:
+    rosa_aws_access_key_id: "{{ rosa_aws_secret.resources[0].data.aws_access_key_id | b64decode }}"
+    rosa_aws_secret_access_key: "{{ rosa_aws_secret.resources[0].data.aws_secret_access_key | b64decode }}"
+    rosa_aws_region_effective: >-
+      {{
+        (rosa_aws_secret.resources[0].data.region | default('') | length > 0)
+        | ternary(rosa_aws_secret.resources[0].data.region | b64decode, rosa_aws_region)
+      }}
+
+- name: "STEP aws | Verify AWS caller identity (idempotent connectivity check)"
+  ansible.builtin.command:
+    cmd: aws sts get-caller-identity --query Account --output text
+  environment:
+    AWS_ACCESS_KEY_ID: "{{ rosa_aws_access_key_id }}"
+    AWS_SECRET_ACCESS_KEY: "{{ rosa_aws_secret_access_key }}"
+    AWS_DEFAULT_REGION: "{{ rosa_aws_region_effective }}"
+  register: rosa_aws_caller
+  changed_when: false
+
+- name: "STEP aws | Assert caller account matches survey selection"
+  ansible.builtin.assert:
+    that:
+      - rosa_aws_caller.stdout | trim == aws_account_id | string
+    fail_msg: >-
+      STEP aws FAILED: STS account {{ rosa_aws_caller.stdout }} does not match
+      survey aws_account_id {{ aws_account_id }}. Check hub secret mapping.
+
+- name: "STEP aws | Ensure CAPA AWSClusterControllerIdentity exists (create-or-update)"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
+      kind: AWSClusterControllerIdentity
+      metadata:
+        name: "default"
+      spec:
+        allowedNamespaces: {}
+  register: rosa_aws_identity
+  failed_when: false
+
+- name: "STEP aws | Note if AWSClusterControllerIdentity CRD unavailable"
+  when: rosa_aws_identity is failed
+  ansible.builtin.debug:
+    msg: >-
+      STEP aws WARN: AWSClusterControllerIdentity not applied (CRD/version).
+      CAPA must be Ready; re-run after CAPI enable succeeds.
+
+- name: "STEP aws | Ensure hub Secret with AWS keys for CAPA controllers (idempotent)"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: "rosa-aws-{{ aws_account_id }}-capa"
+        namespace: "{{ rosa_creds_secret_namespace }}"
+        labels:
+          rosa-hcp-on-helm/managed: "true"
+          rosa-hcp-on-helm/account: "{{ aws_account_id }}"
+      type: Opaque
+      stringData:
+        aws_access_key_id: "{{ rosa_aws_access_key_id }}"
+        aws_secret_access_key: "{{ rosa_aws_secret_access_key }}"
+        region: "{{ rosa_aws_region_effective }}"
+
+- name: "STEP aws | Completed"
+  ansible.builtin.debug:
+    msg: "STEP aws OK (account={{ aws_account_id }}, region={{ rosa_aws_region_effective }})"

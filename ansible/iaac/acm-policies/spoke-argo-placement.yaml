@@ -1,0 +1,28 @@
+# Placement selects ONLY clusters labeled by this flow — never unlabeled existing clusters.
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: rosa-hcp-on-helm-spokes
+  namespace: open-cluster-management
+  labels:
+    rosa-hcp-on-helm/managed: "true"
+spec:
+  predicates:
+    - requiredClusterSelector:
+        labelSelector:
+          matchLabels:
+            rosa-hcp-on-helm/managed: "true"
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: rosa-hcp-on-helm-spoke-argo
+  namespace: open-cluster-management
+placementRef:
+  name: rosa-hcp-on-helm-spokes
+  kind: Placement
+  apiGroup: cluster.open-cluster-management.io
+subjects:
+  - name: rosa-hcp-on-helm-instantiate-argocd
+    kind: Policy
+    apiGroup: policy.open-cluster-management.io

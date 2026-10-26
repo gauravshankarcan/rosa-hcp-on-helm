@@ -1,0 +1,20 @@
+---
+# Copy values into AAP survey extra_vars or a private vars file (never commit secrets).
+# ProvisionRequest constraints (data-model / contracts).
+
+cluster_name: ""                    # required; ROSA-safe name
+cluster_type: "hcp"                 # enum: hcp only in v1
+node_count: 3                       # integer; default 3; min >= 1
+feature_flags: []                   # subset of [karpenter, amq-stream]
+ocp_version: "4.20"                 # enum: 4.20 | 4.21 | 4.22
+aws_account_id: ""                  # required; must match static survey + hub secret
+force_update: false                 # boolean; default false
+
+# Operational
+rosa_readiness_timeout_minutes: 90
+rosa_git_repo_path: "{{ playbook_dir }}/../.."
+rosa_git_commit: true
+rosa_git_push: false                # enable in AAP when remote push credentials exist
+rosa_hub_secrets_namespace: "rosa-hcp-secrets"
+rosa_isolation_label_managed: "rosa-hcp-on-helm/managed"
+rosa_isolation_label_cluster: "rosa-hcp-on-helm/cluster"

@@ -1,0 +1,50 @@
+---
+- name: "STEP deprovision | Require exact name confirmation"
+  ansible.builtin.assert:
+    that:
+      - cluster_name is defined and (cluster_name | length > 0)
+      - confirm_cluster_name is defined
+      - confirm_cluster_name == cluster_name
+    fail_msg: >-
+      STEP deprovision FAILED: confirm_cluster_name must exactly match
+      cluster_name. No destroy performed.
+      (cluster_name='{{ cluster_name }}', confirm='{{ confirm_cluster_name }}')
+
+- name: "STEP deprovision | Check ManagedCluster existence"
+  kubernetes.core.k8s_info:
+    api_version: cluster.open-cluster-management.io/v1
+    kind: ManagedCluster
+    name: "{{ cluster_name }}"
+  register: rosa_mc_deprov
+
+- name: "STEP deprovision | No-op message when cluster already absent"
+  when: rosa_mc_deprov.resources | length == 0
+  ansible.builtin.debug:
+    msg: >-
+      STEP deprovision: ManagedCluster '{{ cluster_name }}' not found —
+      continuing to ensure git artifacts are removed (idempotent).
+
+- name: "STEP deprovision | Delete ManagedCluster when present"
+  when: rosa_mc_deprov.resources | length > 0
+  kubernetes.core.k8s:
+    state: absent
+    api_version: cluster.open-cluster-management.io/v1
+    kind: ManagedCluster
+    name: "{{ cluster_name }}"
+
+- name: "STEP deprovision | Delete CAPI Cluster resource if present"
+  kubernetes.core.k8s:
+    state: absent
+    api_version: cluster.x-k8s.io/v1beta1
+    kind: Cluster
+    name: "{{ cluster_name }}"
+    namespace: "{{ item }}"
+  loop:
+    - default
+    - open-cluster-management
+    - multicluster-engine
+  failed_when: false
+
+- name: "STEP deprovision | Completed cluster teardown step"
+  ansible.builtin.debug:
+    msg: "STEP deprovision OK (cluster teardown requested for {{ cluster_name }})"

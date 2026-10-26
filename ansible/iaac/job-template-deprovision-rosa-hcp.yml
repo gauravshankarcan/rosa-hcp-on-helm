@@ -1,0 +1,29 @@
+---
+controller_job_templates:
+  - name: deprovision-rosa-hcp
+    description: Dedicated teardown for ROSA HCP clusters created by this flow
+    organization: rosa
+    job_type: run
+    inventory: localhost
+    project: rosa-hcp-on-helm
+    playbook: ansible/playbooks/deprovision-rosa-hcp.yml
+    survey_enabled: true
+    survey_spec:
+      name: Deprovision ROSA HCP
+      description: Destroy a cluster; re-type the exact name to confirm
+      spec:
+        - question_name: Cluster name
+          required: true
+          type: text
+          variable: cluster_name
+        - question_name: Confirm cluster name
+          question_description: Must exactly match cluster name or the job aborts with no destroy
+          required: true
+          type: text
+          variable: confirm_cluster_name
+        - question_name: AWS account
+          required: true
+          type: multiplechoice
+          variable: aws_account_id
+          choices:
+            - "545009841689"

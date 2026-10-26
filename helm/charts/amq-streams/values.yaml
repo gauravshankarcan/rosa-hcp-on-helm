@@ -1,0 +1,42 @@
+enabled: false
+
+namespace: amq-streams
+
+operator:
+  enabled: true
+  replicas: 1
+  image:
+    repository: registry.redhat.io/amq-streams/strimzi-rhel9-operator
+    tag: "2.7.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 200m
+      memory: 384Mi
+    limits:
+      cpu: "1"
+      memory: 768Mi
+
+kafka:
+  enabled: true
+  replicas: 3
+  version: "3.7.0"
+  storage:
+    type: persistent-claim
+    size: 100Gi
+  config:
+    offsets.topic.replication.factor: 3
+    transaction.state.log.replication.factor: 3
+    transaction.state.log.min.isr: 2
+
+entityOperator:
+  enabled: true
+  topicOperator:
+    enabled: true
+  userOperator:
+    enabled: true
+
+serviceAccount:
+  create: true
+  name: amq-streams-operator
+  annotations: {}

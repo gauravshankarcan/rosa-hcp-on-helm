@@ -1,0 +1,6 @@
+---
+rosa_git_repo_path: "{{ playbook_dir }}/../.."
+rosa_git_push: true
+# Prefer env ROSA_GIT_REPO_URL; else discover from `git remote get-url origin`
+rosa_git_repo_url: "{{ lookup('env', 'ROSA_GIT_REPO_URL') | default('', true) }}"
+rosa_git_branch: "{{ lookup('env', 'ROSA_GIT_BRANCH') | default('main', true) }}"

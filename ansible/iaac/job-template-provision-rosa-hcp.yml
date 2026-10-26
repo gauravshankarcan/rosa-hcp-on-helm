@@ -1,0 +1,73 @@
+---
+# AAP job template + survey for provision (HCP only). Static AWS account list — update choices when adding accounts.
+controller_job_templates:
+  - name: provision-rosa-hcp
+    description: Provision ROSA HCP cluster (survey-driven)
+    organization: rosa
+    job_type: run
+    inventory: localhost
+    project: rosa-hcp-on-helm
+    playbook: ansible/playbooks/provision-rosa-hcp.yml
+    ask_variables_on_launch: false
+    survey_enabled: true
+    survey_spec:
+      name: Provision ROSA HCP
+      description: Create or force-update a ROSA HCP cluster
+      spec:
+        - question_name: Cluster name
+          question_description: Unique ROSA cluster name for this flow
+          required: true
+          type: text
+          variable: cluster_name
+          default: ""
+        - question_name: Cluster type
+          question_description: v1 supports HCP only
+          required: true
+          type: multiplechoice
+          variable: cluster_type
+          default: hcp
+          choices:
+            - hcp
+        - question_name: Node count
+          question_description: Worker node count (default 3); Helm supports multiple node pools
+          required: true
+          type: integer
+          variable: node_count
+          default: 3
+          min: 1
+        - question_name: Feature flags
+          question_description: Charts to enable on the spoke cluster
+          required: false
+          type: multiselect
+          variable: feature_flags
+          default: ""
+          choices:
+            - karpenter
+            - amq-stream
+        - question_name: OpenShift version
+          required: true
+          type: multiplechoice
+          variable: ocp_version
+          choices:
+            - "4.20"
+            - "4.21"
+            - "4.22"
+        - question_name: AWS account
+          question_description: Static list; credentials live in hub rosa-hcp-secrets as rosa-aws-<account_id>
+          required: true
+          type: multiplechoice
+          variable: aws_account_id
+          choices:
+            # Maintain static list; keep in sync with hub secrets rosa-aws-<id>
+            - "545009841689"
+            # Example (replace at import time from your account inventory):
+            # - "123456789012"
+        - question_name: Force update
+          question_description: Required to reconcile an existing cluster name
+          required: true
+          type: multiplechoice
+          variable: force_update
+          default: "false"
+          choices:
+            - "false"
+            - "true"

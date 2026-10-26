@@ -1,0 +1,44 @@
+# Rich defaults — cluster overrides stay thin (enable + deltas only).
+enabled: false
+
+namespace: karpenter
+
+controller:
+  enabled: true
+  replicas: 2
+  image:
+    repository: public.ecr.aws/karpenter/controller
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  settings:
+    clusterName: ""
+    interruptionQueue: ""
+    featureGates:
+      spotToSpotConsolidation: false
+
+nodePools:
+  enabled: true
+  defaults:
+    - name: default
+      weight: 10
+      limits:
+        cpu: "1000"
+      disruption:
+        consolidationPolicy: WhenEmptyOrUnderutilized
+        consolidateAfter: 1m
+
+serviceAccount:
+  create: true
+  name: karpenter
+  annotations: {}
+
+tolerations: []
+nodeSelector: {}
+affinity: {}

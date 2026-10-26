@@ -1,0 +1,11 @@
+---
+# DeprovisionRequest constraints.
+
+cluster_name: ""                    # required
+confirm_cluster_name: ""            # required; MUST equal cluster_name exactly
+aws_account_id: ""                  # required when cloud teardown needs account creds
+
+rosa_git_repo_path: "{{ playbook_dir }}/../.."
+rosa_git_commit: true
+rosa_git_push: false
+rosa_hub_secrets_namespace: "rosa-hcp-secrets"

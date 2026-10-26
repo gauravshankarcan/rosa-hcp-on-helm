@@ -1,0 +1,7 @@
+---
+galaxy_info:
+  role_name: rosa_git_auth_push
+  description: Push current branch using GIT_TOKEN (never logs the token)
+  license: Apache-2.0
+  min_ansible_version: "2.15"
+dependencies: []

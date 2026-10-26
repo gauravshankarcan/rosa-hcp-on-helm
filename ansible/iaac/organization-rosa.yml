@@ -1,0 +1,7 @@
+---
+# AAP / Ansible Controller definition — organization rosa
+# Apply with your Controller collection or UI import. Contains no secrets.
+controller_organizations:
+  - name: rosa
+    description: ROSA HCP provisioning and deprovisioning via survey jobs
+    max_hosts: 0

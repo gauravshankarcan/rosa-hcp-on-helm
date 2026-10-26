@@ -1,0 +1,30 @@
+---
+- name: "STEP capi-verify | Wait for capi-controller-manager Ready"
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: capi-controller-manager
+    namespace: "{{ rosa_mce_namespace }}"
+  register: rosa_capi_deploy
+  until:
+    - rosa_capi_deploy.resources | length > 0
+    - rosa_capi_deploy.resources[0].status.readyReplicas | default(0) | int >= 1
+  retries: "{{ rosa_capi_verify_retries }}"
+  delay: "{{ rosa_capi_verify_delay }}"
+
+- name: "STEP capi-verify | Wait for capa-controller-manager Ready"
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: capa-controller-manager
+    namespace: "{{ rosa_mce_namespace }}"
+  register: rosa_capa_deploy
+  until:
+    - rosa_capa_deploy.resources | length > 0
+    - rosa_capa_deploy.resources[0].status.readyReplicas | default(0) | int >= 1
+  retries: "{{ rosa_capi_verify_retries }}"
+  delay: "{{ rosa_capi_verify_delay }}"
+
+- name: "STEP capi-verify | Controllers Ready"
+  ansible.builtin.debug:
+    msg: "STEP capi-verify OK (capi + capa Ready in {{ rosa_mce_namespace }})"

@@ -1,0 +1,108 @@
+---
+- name: "STEP apply-capi | Skip when disabled"
+  when: not (rosa_apply_capi_cluster | bool)
+  ansible.builtin.debug:
+    msg: "STEP apply-capi SKIPPED (rosa_apply_capi_cluster=false)"
+
+- name: "STEP apply-capi | Soft-skip when CAPI unavailable on hub"
+  when:
+    - rosa_apply_capi_cluster | bool
+    - rosa_apply_capi_soft_skip | bool
+    - not (rosa_capi_available | default(true) | bool)
+  ansible.builtin.debug:
+    msg: >-
+      STEP apply-capi SKIPPED — rosa_capi_available=false. Git artifacts still
+      written; cloud/CAPI apply requires a hub with cluster-api enabled
+      (mutually exclusive with Hypershift on MulticlusterEngine).
+
+- name: "STEP apply-capi | Check OCM credentials secret"
+  when:
+    - rosa_apply_capi_cluster | bool
+    - rosa_capi_available | default(true) | bool
+    - rosa_require_ocm_secret | bool
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Secret
+    name: "{{ rosa_ocm_secret_name }}"
+    namespace: "{{ rosa_ocm_secret_namespace }}"
+  register: rosa_ocm_secret_info
+
+- name: "STEP apply-capi | Handle missing OCM secret"
+  when:
+    - rosa_apply_capi_cluster | bool
+    - rosa_capi_available | default(true) | bool
+    - rosa_require_ocm_secret | bool
+    - rosa_ocm_secret_info is defined
+    - rosa_ocm_secret_info.resources | default([]) | length == 0
+  block:
+    - name: "STEP apply-capi | Record OCM missing"
+      ansible.builtin.set_fact:
+        rosa_apply_capi_ocm_missing: true
+    - name: "STEP apply-capi | Soft-skip OCM missing"
+      when: rosa_apply_capi_soft_skip | bool
+      ansible.builtin.debug:
+        msg: >-
+          STEP apply-capi SKIPPED — Secret {{ rosa_ocm_secret_namespace }}/{{ rosa_ocm_secret_name }}
+          missing (needs ocmToken). Git artifacts still written. Add OCM_TOKEN and run
+          /tmp/rosa-crc-hub/scripts/ensure-ocm-secret.sh for full cloud create.
+    - name: "STEP apply-capi | Hard-fail OCM missing"
+      when: not (rosa_apply_capi_soft_skip | bool)
+      ansible.builtin.fail:
+        msg: >-
+          STEP apply-capi FAILED — Secret {{ rosa_ocm_secret_namespace }}/{{ rosa_ocm_secret_name }}
+          missing. Create it with OCM_TOKEN via /tmp/rosa-crc-hub/scripts/ensure-ocm-secret.sh
+          or set rosa_apply_capi_soft_skip=true.
+
+- name: "STEP apply-capi | Apply ROSA HCP CAPI manifests for {{ cluster_name }}"
+  when:
+    - rosa_apply_capi_cluster | bool
+    - rosa_capi_available | default(true) | bool
+    - not (rosa_apply_capi_ocm_missing | default(false) | bool)
+  block:
+    - name: "STEP apply-capi | Render manifest"
+      ansible.builtin.tempfile:
+        state: file
+        suffix: "-rosa-{{ cluster_name }}.yaml"
+      register: rosa_capi_tmp
+
+    - name: "STEP apply-capi | Write rendered YAML"
+      ansible.builtin.template:
+        src: rosa-hcp-cluster.yaml.j2
+        dest: "{{ rosa_capi_tmp.path }}"
+        mode: "0600"
+
+    - name: "STEP apply-capi | Apply to hub (create-or-update)"
+      kubernetes.core.k8s:
+        state: present
+        src: "{{ rosa_capi_tmp.path }}"
+      register: rosa_capi_apply
+      failed_when: false
+
+    - name: "STEP apply-capi | Soft-skip on CRD errors when configured"
+      when:
+        - rosa_capi_apply is failed
+        - rosa_apply_capi_soft_skip | bool
+      ansible.builtin.debug:
+        msg: >-
+          STEP apply-capi soft-skip after apply failure:
+          {{ rosa_capi_apply.msg | default(rosa_capi_apply) }}
+
+    - name: "STEP apply-capi | Fail clearly if CRDs/spec rejected"
+      when:
+        - rosa_capi_apply is failed
+        - not (rosa_apply_capi_soft_skip | bool)
+      ansible.builtin.fail:
+        msg: >-
+          STEP apply-capi FAILED applying CAPI ROSA manifests for '{{ cluster_name }}'.
+          Ensure CAPI/CAPA are Ready and ROSA-specific CRDs exist. Error:
+          {{ rosa_capi_apply.msg | default(rosa_capi_apply) }}.
+
+    - name: "STEP apply-capi | Cleanup tempfile"
+      ansible.builtin.file:
+        path: "{{ rosa_capi_tmp.path }}"
+        state: absent
+
+    - name: "STEP apply-capi | Completed"
+      when: rosa_capi_apply is succeeded
+      ansible.builtin.debug:
+        msg: "STEP apply-capi OK (cluster={{ cluster_name }})"

@@ -1,0 +1,14 @@
+---
+# Idempotent CAPI/CAPA enablement on ACM Multicluster Engine.
+- name: Enable CAPI APIs on ACM
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  pre_tasks:
+    - name: "PRE | Require hub login context"
+      ansible.builtin.assert:
+        that:
+          - lookup('env', 'KUBECONFIG') | length > 0 or lookup('env', 'OCP_CENTRAL_SERVER') | length > 0
+        fail_msg: "Source ./env and run scripts/hub-login.sh before enabling CAPI."
+  roles:
+    - role: rosa_capi_enable

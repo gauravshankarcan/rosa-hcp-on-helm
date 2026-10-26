@@ -1,0 +1,7 @@
+---
+galaxy_info:
+  role_name: rosa_capi_enable
+  description: Idempotent ACM/MCE CAPI+CAPA enablement for ROSA HCP
+  license: Apache-2.0
+  min_ansible_version: "2.15"
+dependencies: []

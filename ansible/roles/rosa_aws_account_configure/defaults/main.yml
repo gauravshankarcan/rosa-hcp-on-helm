@@ -1,0 +1,9 @@
+---
+aws_account_id: ""
+rosa_hub_secrets_namespace: "rosa-hcp-secrets"
+rosa_aws_secret_name_prefix: "rosa-aws-"
+rosa_aws_region: "us-east-1"
+# When true, also ensure OCM/ROSA creds secret referenced by CAPA exists
+rosa_ensure_rosa_creds_secret: true
+rosa_creds_secret_name: "rosa-creds-secret"
+rosa_creds_secret_namespace: "multicluster-engine"
