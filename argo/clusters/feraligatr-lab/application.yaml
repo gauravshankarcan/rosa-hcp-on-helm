@@ -13,10 +13,10 @@ spec:
   source:
     repoURL: https://github.com/gauravshankarcan/rosa-hcp-on-helm.git
     targetRevision: main
-    path: feraligatr-lab
+    path: feraligatr-lab/capi
   destination:
     server: https://kubernetes.default.svc
-    namespace: open-cluster-management
+    namespace: default
   syncPolicy:
     automated:
       prune: true

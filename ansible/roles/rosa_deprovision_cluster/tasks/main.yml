@@ -10,6 +10,13 @@
       cluster_name. No destroy performed.
       (cluster_name='{{ cluster_name }}', confirm='{{ confirm_cluster_name }}')
 
+- name: "STEP deprovision | Resolve CAPI namespaces"
+  ansible.builtin.set_fact:
+    rosa_deprov_namespaces:
+      - "{{ rosa_capi_namespace | default('default') }}"
+      - open-cluster-management
+      - multicluster-engine
+
 - name: "STEP deprovision | Check ManagedCluster existence"
   kubernetes.core.k8s_info:
     api_version: cluster.open-cluster-management.io/v1
@@ -22,7 +29,7 @@
   ansible.builtin.debug:
     msg: >-
       STEP deprovision: ManagedCluster '{{ cluster_name }}' not found —
-      continuing to ensure git artifacts are removed (idempotent).
+      continuing to ensure CAPI objects and git artifacts are removed (idempotent).
 
 - name: "STEP deprovision | Delete ManagedCluster when present"
   when: rosa_mc_deprov.resources | length > 0
@@ -32,19 +39,80 @@
     kind: ManagedCluster
     name: "{{ cluster_name }}"
 
+- name: "STEP deprovision | Delete ROSAMachinePools for cluster"
+  kubernetes.core.k8s:
+    state: absent
+    api_version: infrastructure.cluster.x-k8s.io/v1beta2
+    kind: ROSAMachinePool
+    namespace: "{{ item }}"
+    label_selectors:
+      - "rosa-hcp-on-helm/cluster={{ cluster_name }}"
+  loop: "{{ rosa_deprov_namespaces }}"
+  failed_when: false
+
+- name: "STEP deprovision | Delete MachinePools for cluster"
+  kubernetes.core.k8s:
+    state: absent
+    api_version: cluster.x-k8s.io/v1beta2
+    kind: MachinePool
+    namespace: "{{ item }}"
+    label_selectors:
+      - "cluster.x-k8s.io/cluster-name={{ cluster_name }}"
+  loop: "{{ rosa_deprov_namespaces }}"
+  failed_when: false
+
+- name: "STEP deprovision | Delete ROSAControlPlane"
+  kubernetes.core.k8s:
+    state: absent
+    api_version: controlplane.cluster.x-k8s.io/v1beta2
+    kind: ROSAControlPlane
+    name: "{{ cluster_name }}-cp"
+    namespace: "{{ item }}"
+  loop: "{{ rosa_deprov_namespaces }}"
+  failed_when: false
+
+- name: "STEP deprovision | Delete ROSACluster"
+  kubernetes.core.k8s:
+    state: absent
+    api_version: infrastructure.cluster.x-k8s.io/v1beta2
+    kind: ROSACluster
+    name: "{{ cluster_name }}-infra"
+    namespace: "{{ item }}"
+  loop: "{{ rosa_deprov_namespaces }}"
+  failed_when: false
+
 - name: "STEP deprovision | Delete CAPI Cluster resource if present"
   kubernetes.core.k8s:
     state: absent
-    api_version: cluster.x-k8s.io/v1beta1
+    api_version: cluster.x-k8s.io/v1beta2
     kind: Cluster
     name: "{{ cluster_name }}"
     namespace: "{{ item }}"
+  loop: "{{ rosa_deprov_namespaces }}"
+  failed_when: false
+
+- name: "STEP deprovision | Delete cluster kubeconfig / import secrets (best-effort)"
+  kubernetes.core.k8s:
+    state: absent
+    api_version: v1
+    kind: Secret
+    name: "{{ item.name }}"
+    namespace: "{{ item.namespace }}"
   loop:
-    - default
-    - open-cluster-management
-    - multicluster-engine
+    - { name: "{{ cluster_name }}-kubeconfig", namespace: "{{ rosa_capi_namespace | default('default') }}" }
+    - { name: "{{ cluster_name }}-admin-password", namespace: "{{ rosa_capi_namespace | default('default') }}" }
+    - { name: auto-import-secret, namespace: "{{ cluster_name }}" }
+    - { name: "{{ cluster_name }}-import", namespace: "{{ cluster_name }}" }
+  failed_when: false
+
+- name: "STEP deprovision | Delete cluster namespace when empty import ns"
+  kubernetes.core.k8s:
+    state: absent
+    api_version: v1
+    kind: Namespace
+    name: "{{ cluster_name }}"
   failed_when: false
 
 - name: "STEP deprovision | Completed cluster teardown step"
   ansible.builtin.debug:
-    msg: "STEP deprovision OK (cluster teardown requested for {{ cluster_name }})"
+    msg: "STEP deprovision OK (full CAPI/ROSA teardown requested for {{ cluster_name }})"

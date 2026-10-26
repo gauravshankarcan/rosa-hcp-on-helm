@@ -55,6 +55,41 @@
       STEP aws FAILED: STS account {{ rosa_aws_caller.stdout }} does not match
       survey aws_account_id {{ aws_account_id }}. Check hub secret mapping.
 
+- name: "STEP aws | Ensure CAPA StaticIdentity credential Secret (AccessKeyID/SecretAccessKey)"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: "{{ rosa_aws_static_secret_name }}"
+        namespace: "{{ item }}"
+        labels:
+          rosa-hcp-on-helm/managed: "true"
+          rosa-hcp-on-helm/account: "{{ aws_account_id }}"
+      type: Opaque
+      stringData:
+        AccessKeyID: "{{ rosa_aws_access_key_id }}"
+        SecretAccessKey: "{{ rosa_aws_secret_access_key }}"
+  loop:
+    - "{{ rosa_capa_namespace }}"
+    - "{{ rosa_capi_namespace }}"
+
+- name: "STEP aws | Ensure AWSClusterStaticIdentity {{ rosa_aws_static_identity_name }}"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
+      kind: AWSClusterStaticIdentity
+      metadata:
+        name: "{{ rosa_aws_static_identity_name }}"
+        labels:
+          rosa-hcp-on-helm/managed: "true"
+      spec:
+        secretRef: "{{ rosa_aws_static_secret_name }}"
+        allowedNamespaces: {}
+  register: rosa_aws_static_identity
+
 - name: "STEP aws | Ensure CAPA AWSClusterControllerIdentity exists (create-or-update)"
   kubernetes.core.k8s:
     state: present
@@ -73,7 +108,7 @@
   ansible.builtin.debug:
     msg: >-
       STEP aws WARN: AWSClusterControllerIdentity not applied (CRD/version).
-      CAPA must be Ready; re-run after CAPI enable succeeds.
+      StaticIdentity {{ rosa_aws_static_identity_name }} is the primary path for CRC/non-AWS hubs.
 
 - name: "STEP aws | Ensure hub Secret with AWS keys for CAPA controllers (idempotent)"
   kubernetes.core.k8s:
@@ -93,6 +128,30 @@
         aws_secret_access_key: "{{ rosa_aws_secret_access_key }}"
         region: "{{ rosa_aws_region_effective }}"
 
+- name: "STEP aws | Ensure OCM rosa-creds-secret from env OCM_TOKEN when present"
+  when:
+    - rosa_ensure_rosa_creds_secret | bool
+    - lookup('env', 'OCM_TOKEN') | length > 0
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: "{{ rosa_creds_secret_name }}"
+        namespace: "{{ item }}"
+        labels:
+          rosa-hcp-on-helm/managed: "true"
+      type: Opaque
+      stringData:
+        ocmToken: "{{ lookup('env', 'OCM_TOKEN') }}"
+        ocmApiUrl: "{{ lookup('env', 'OCM_API_URL') | default('https://api.openshift.com', true) }}"
+  loop:
+    - "{{ rosa_creds_secret_namespace }}"
+    - "{{ rosa_capi_namespace }}"
+
 - name: "STEP aws | Completed"
   ansible.builtin.debug:
-    msg: "STEP aws OK (account={{ aws_account_id }}, region={{ rosa_aws_region_effective }})"
+    msg: >-
+      STEP aws OK (account={{ aws_account_id }}, region={{ rosa_aws_region_effective }},
+      staticIdentity={{ rosa_aws_static_identity_name }})

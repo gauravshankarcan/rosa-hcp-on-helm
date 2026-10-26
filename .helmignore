@@ -1,0 +1,21 @@
+# Patterns to ignore when packaging Helm charts
+.git/
+.gitignore
+.env*
+env
+*.md
+*.tgz
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+.vscode/
+.idea/
+*.secret.yaml
+secrets/
+.kube/
+kubeconfig*
+*.key
+*.crt
+__pycache__/
+*.pyc

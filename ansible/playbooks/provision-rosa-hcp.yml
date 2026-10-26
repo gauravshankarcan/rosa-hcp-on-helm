@@ -31,6 +31,7 @@
     - role: rosa_hcp_secrets_namespace
     - role: rosa_capi_enable
     - role: rosa_aws_account_configure
-    - role: rosa_git_commit_argo_app
+    # Apply CAPI first so <cluster>/capi/*.yaml exists before git commit (FR-007 / T059)
     - role: rosa_apply_capi_cluster
+    - role: rosa_git_commit_argo_app
     - role: rosa_cluster_readiness_poll

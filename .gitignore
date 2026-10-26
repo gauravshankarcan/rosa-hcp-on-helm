@@ -8,6 +8,8 @@ env
 *secret*
 !*secret*.md
 !**/rosa-hcp-secrets/**
+!scripts/ensure-*-secret.sh
+!scripts/ensure-*-secrets.sh
 .vault_pass
 .vault_pass.txt
 *.vault

@@ -1,0 +1,121 @@
+# Generated from hub for app-of-apps path feraligatr-lab/capi (T065)
+apiVersion: cluster.x-k8s.io/v1beta2
+kind: Cluster
+metadata:
+  finalizers:
+  - cluster.cluster.x-k8s.io
+  labels:
+    cluster.x-k8s.io/watch-filter: multicluster-engine
+    rosa-hcp-on-helm/cluster: feraligatr-lab
+    rosa-hcp-on-helm/managed: "true"
+  name: feraligatr-lab
+  namespace: default
+spec:
+  clusterNetwork:
+    pods:
+      cidrBlocks:
+      - 10.128.0.0/14
+    services:
+      cidrBlocks:
+      - 172.30.0.0/16
+  controlPlaneEndpoint:
+    host: api.feraligatr-lab.cnl3.p3.openshiftapps.com
+    port: 443
+  controlPlaneRef:
+    apiGroup: controlplane.cluster.x-k8s.io
+    kind: ROSAControlPlane
+    name: feraligatr-lab-cp
+  infrastructureRef:
+    apiGroup: infrastructure.cluster.x-k8s.io
+    kind: ROSACluster
+    name: feraligatr-lab-infra
+---
+apiVersion: controlplane.cluster.x-k8s.io/v1beta2
+kind: ROSAControlPlane
+metadata:
+  annotations:
+    force-reconcile: "1793031408"
+    ocm-token-refresh: "1793031478"
+    rosa-hcp-on-helm/reconcile: "1793030178"
+  finalizers:
+  - rosacontrolplane.controlplane.cluster.x-k8s.io
+  labels:
+    cluster.x-k8s.io/cluster-name: feraligatr-lab
+    rosa-hcp-on-helm/cluster: feraligatr-lab
+    rosa-hcp-on-helm/managed: "true"
+  name: feraligatr-lab-cp
+  namespace: default
+  ownerReferences:
+  - apiVersion: cluster.x-k8s.io/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Cluster
+    name: feraligatr-lab
+    uid: 40fea193-4f26-48dc-b2ae-457e1b655714
+spec:
+  availabilityZones:
+  - us-east-1a
+  - us-east-1b
+  billingAccount: "767398142932"
+  channelGroup: stable
+  controlPlaneEndpoint:
+    host: api.feraligatr-lab.cnl3.p3.openshiftapps.com
+    port: 443
+  credentialsSecretRef:
+    name: rosa-creds-secret
+  defaultMachinePoolSpec:
+    instanceType: m5.xlarge
+  domainPrefix: feraligatr-lab
+  enableExternalAuthProviders: false
+  endpointAccess: Public
+  fips: Disabled
+  identityRef:
+    kind: AWSClusterStaticIdentity
+    name: rosa-static
+  installerRoleARN: arn:aws:iam::545009841689:role/ManagedOpenShift-HCP-ROSA-Installer-Role
+  network:
+    hostPrefix: 23
+    machineCIDR: 10.0.0.0/16
+    networkType: OVNKubernetes
+  oidcID: 2tmig82c48h79jcfv3ee6dvrgmr2aj8p
+  region: us-east-1
+  rolesRef:
+    controlPlaneOperatorARN: arn:aws:iam::545009841689:role/feraligatr-lab-kube-system-control-plane-operator
+    imageRegistryARN: arn:aws:iam::545009841689:role/feraligatr-lab-openshift-image-registry-installer-cloud-credenti
+    ingressARN: arn:aws:iam::545009841689:role/feraligatr-lab-openshift-ingress-operator-cloud-credentials
+    kmsProviderARN: arn:aws:iam::545009841689:role/feraligatr-lab-kube-system-kms-provider
+    kubeCloudControllerARN: arn:aws:iam::545009841689:role/feraligatr-lab-kube-system-kube-controller-manager
+    networkARN: arn:aws:iam::545009841689:role/feraligatr-lab-openshift-cloud-network-config-controller-cloud-c
+    nodePoolManagementARN: arn:aws:iam::545009841689:role/feraligatr-lab-kube-system-capa-controller-manager
+    storageARN: arn:aws:iam::545009841689:role/feraligatr-lab-openshift-cluster-csi-drivers-ebs-cloud-credentia
+  rosaClusterName: feraligatr-lab
+  subnets:
+  - subnet-003d5860c175bb465
+  - subnet-04e3a4a52e11a5104
+  - subnet-018350e21968f6a1b
+  - subnet-0a1621a89ba85bd86
+  supportRoleARN: arn:aws:iam::545009841689:role/ManagedOpenShift-HCP-ROSA-Support-Role
+  version: 4.21.37
+  versionGate: WaitForAcknowledge
+  workerRoleARN: arn:aws:iam::545009841689:role/ManagedOpenShift-HCP-ROSA-Worker-Role
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
+kind: ROSACluster
+metadata:
+  labels:
+    cluster.x-k8s.io/cluster-name: feraligatr-lab
+    rosa-hcp-on-helm/cluster: feraligatr-lab
+    rosa-hcp-on-helm/managed: "true"
+  name: feraligatr-lab-infra
+  namespace: default
+  ownerReferences:
+  - apiVersion: cluster.x-k8s.io/v1beta2
+    blockOwnerDeletion: true
+    controller: true
+    kind: Cluster
+    name: feraligatr-lab
+    uid: 40fea193-4f26-48dc-b2ae-457e1b655714
+spec:
+  controlPlaneEndpoint:
+    host: api.feraligatr-lab.cnl3.p3.openshiftapps.com
+    port: 443

@@ -4,16 +4,52 @@
   ansible.builtin.debug:
     msg: "STEP apply-capi SKIPPED (rosa_apply_capi_cluster=false)"
 
-- name: "STEP apply-capi | Soft-skip when CAPI unavailable on hub"
+- name: "STEP apply-capi | Fail closed when CAPI unavailable on hub"
+  when:
+    - rosa_apply_capi_cluster | bool
+    - not (rosa_capi_available | default(true) | bool)
+    - not (rosa_apply_capi_soft_skip | bool)
+  ansible.builtin.fail:
+    msg: >-
+      STEP apply-capi FAILED — rosa_capi_available=false. Enable CAPI/CAPA on the
+      hub (see ansible/docs/capi-enablement.md) or set rosa_apply_capi_soft_skip=true
+      only for documented git-only dry-runs (Ready poll will still fail unless
+      rosa_skip_readiness_poll=true).
+
+- name: "STEP apply-capi | Soft-skip when CAPI unavailable (dry-run only)"
   when:
     - rosa_apply_capi_cluster | bool
     - rosa_apply_capi_soft_skip | bool
     - not (rosa_capi_available | default(true) | bool)
   ansible.builtin.debug:
     msg: >-
-      STEP apply-capi SKIPPED — rosa_capi_available=false. Git artifacts still
-      written; cloud/CAPI apply requires a hub with cluster-api enabled
-      (mutually exclusive with Hypershift on MulticlusterEngine).
+      STEP apply-capi SKIPPED — rosa_capi_available=false and
+      rosa_apply_capi_soft_skip=true (git-only dry-run). Ready will fail unless
+      rosa_skip_readiness_poll=true.
+
+- name: "STEP apply-capi | Ensure OCM secret from env when missing"
+  when:
+    - rosa_apply_capi_cluster | bool
+    - rosa_capi_available | default(true) | bool
+    - rosa_require_ocm_secret | bool
+    - lookup('env', 'OCM_TOKEN') | length > 0
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: "{{ rosa_ocm_secret_name }}"
+        namespace: "{{ item }}"
+        labels:
+          rosa-hcp-on-helm/managed: "true"
+      type: Opaque
+      stringData:
+        ocmToken: "{{ lookup('env', 'OCM_TOKEN') }}"
+        ocmApiUrl: "{{ lookup('env', 'OCM_API_URL') | default('https://api.openshift.com', true) }}"
+  loop:
+    - "{{ rosa_ocm_secret_namespace }}"
+    - "{{ rosa_capi_namespace }}"
 
 - name: "STEP apply-capi | Check OCM credentials secret"
   when:
@@ -43,15 +79,52 @@
       ansible.builtin.debug:
         msg: >-
           STEP apply-capi SKIPPED — Secret {{ rosa_ocm_secret_namespace }}/{{ rosa_ocm_secret_name }}
-          missing (needs ocmToken). Git artifacts still written. Add OCM_TOKEN and run
-          /tmp/rosa-crc-hub/scripts/ensure-ocm-secret.sh for full cloud create.
+          missing (needs ocmToken). Source OCM_TOKEN in env and re-run, or
+          ./scripts/ensure-ocm-secret.sh.
     - name: "STEP apply-capi | Hard-fail OCM missing"
       when: not (rosa_apply_capi_soft_skip | bool)
       ansible.builtin.fail:
         msg: >-
           STEP apply-capi FAILED — Secret {{ rosa_ocm_secret_namespace }}/{{ rosa_ocm_secret_name }}
-          missing. Create it with OCM_TOKEN via /tmp/rosa-crc-hub/scripts/ensure-ocm-secret.sh
-          or set rosa_apply_capi_soft_skip=true.
+          missing. Source OCM_TOKEN (see env.example) and re-run, or
+          ./scripts/ensure-ocm-secret.sh. Soft-skip only via rosa_apply_capi_soft_skip=true
+          for git-only dry-runs.
+
+- name: "STEP apply-capi | Validate full cloud inputs"
+  when:
+    - rosa_apply_capi_cluster | bool
+    - rosa_capi_available | default(true) | bool
+    - not (rosa_apply_capi_ocm_missing | default(false) | bool)
+    - rosa_require_full_capi_inputs | bool
+    - not (rosa_apply_capi_soft_skip | bool)
+  ansible.builtin.assert:
+    that:
+      - (rosa_ocp_version | default('') | length > 0) or (ocp_version | length > 0)
+      - rosa_oidc_config_id | length > 0
+      - rosa_installer_role_arn | length > 0
+      - rosa_support_role_arn | length > 0
+      - rosa_worker_role_arn | length > 0
+      - rosa_control_plane_operator_arn | length > 0
+      - rosa_image_registry_arn | length > 0
+      - rosa_ingress_arn | length > 0
+      - rosa_kms_provider_arn | length > 0
+      - rosa_kube_cloud_controller_arn | length > 0
+      - rosa_network_arn | length > 0
+      - rosa_node_pool_management_arn | length > 0
+      - rosa_storage_arn | length > 0
+      - (rosa_subnet_ids | default([])) | length >= 2
+      - (rosa_availability_zones | default([])) | length >= 1
+      - >
+          (rosa_availability_zones | default([]) | length == 0)
+          or ((node_count | int) % (rosa_availability_zones | length) == 0)
+    fail_msg: >-
+      STEP apply-capi FAILED — incomplete ROSAControlPlane inputs. Provide
+      rosa_ocp_version (or ocp_version), rosa_oidc_config_id, account/operator
+      role ARNs (installer/support/worker + full rolesRef), rosa_subnet_ids
+      (public+private pairs), and rosa_availability_zones. node_count must be a
+      multiple of AZ count (defaultMachinePoolSpec.autoscaling). Optional:
+      rosa_billing_account for marketplace billing. Set
+      rosa_require_full_capi_inputs=false only for incomplete dry-runs.
 
 - name: "STEP apply-capi | Apply ROSA HCP CAPI manifests for {{ cluster_name }}"
   when:
@@ -70,6 +143,21 @@
         src: rosa-hcp-cluster.yaml.j2
         dest: "{{ rosa_capi_tmp.path }}"
         mode: "0600"
+
+    - name: "STEP apply-capi | Ensure git capi directory"
+      when: rosa_write_capi_git_artifact | bool
+      ansible.builtin.file:
+        path: "{{ rosa_git_repo_path | realpath }}/{{ cluster_name }}/capi"
+        state: directory
+        mode: "0755"
+
+    - name: "STEP apply-capi | Write CAPI artifact into cluster git path"
+      when: rosa_write_capi_git_artifact | bool
+      ansible.builtin.copy:
+        src: "{{ rosa_capi_tmp.path }}"
+        dest: "{{ rosa_git_repo_path | realpath }}/{{ cluster_name }}/capi/rosa-hcp-cluster.yaml"
+        mode: "0644"
+        remote_src: true
 
     - name: "STEP apply-capi | Apply to hub (create-or-update)"
       kubernetes.core.k8s:

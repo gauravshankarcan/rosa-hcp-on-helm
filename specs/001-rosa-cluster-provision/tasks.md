@@ -273,3 +273,31 @@ Task: "T048 helm/charts/README.md"
 - Never commit `env` or secret payloads
 - Classic ROSA is out of scope — do not add classic survey options
 - Suggested next command: `/speckit-implement`
+
+---
+
+## Phase 10: Convergence
+
+**Purpose**: Close gaps between spec/plan/constitution and current implementation (converge F1–F11)
+
+- [x] T052 CRITICAL Create idempotent `AWSClusterStaticIdentity` plus CAPA credential Secret (`AccessKeyID`/`SecretAccessKey`) in `ansible/roles/rosa_aws_account_configure/` and wire `identityRef` in `rosa_apply_capi_cluster` for non-AWS hubs per FR-004 / plan: AWS account config (missing)
+- [x] T053 CRITICAL Fail provision when cluster Ready is not observed: default `rosa_apply_capi_soft_skip` off for real runs and stop readiness soft-success paths in `rosa_cluster_readiness_poll` / `rosa_apply_capi_cluster` per FR-016 / US1/AC5 / SC-008 (contradicts)
+- [x] T054 Add in-repo OCM secret ensure from sourced `OCM_TOKEN` (replace `/tmp`-only path) and hard-fail CAPI apply when cloud create requires it in `rosa_apply_capi_cluster` per FR-004 / FR-016 (partial)
+- [x] T055 Populate full `ROSAControlPlane` inputs (`rosa_ocp_version` semver, `billingAccount`, complete `rolesRef`, OIDC, subnets) from account/config vars and fail if required fields missing in `rosa_apply_capi_cluster` per FR-004 (partial)
+- [x] T056 Re-apply and verify `ClusterImporter` + `ManagedClusterAutoApproval` persist on ClusterManager after reconcile; fail if gates drop in `rosa_capi_enable` per FR-011 / T030 (partial)
+- [x] T057 Extend ACM Policy/Placement in `ansible/iaac/acm-policies/` to push required credentials and instantiate spoke Argo CD for isolation-labeled clusters only per FR-008 / US1/AC3 (partial)
+- [x] T058 Generate spoke Argo Applications (or ACM-delivered apps) that apply `helm/charts/{karpenter,amq-streams}` from `feature_flags` with thin overrides per FR-009 / US1/AC3 / SC-004 / Constitution VI (missing)
+- [x] T059 Make `<cluster>/base-values.yaml` (or derived manifests) the ACM/CAPI deploy source consumed via app-of-apps rather than only a side-channel apply role per FR-007 / plan: base-values → ACM deploy (partial)
+- [x] T060 Fail closed when CAPI/CAPA cannot be enabled or verified (override only with explicit documented dry-run that still fails Ready) in `rosa_capi_enable` / provision playbook per FR-011 / US4/AC1 (contradicts)
+- [x] T061 Document CRC/local-hub ManagedCluster import reachability limits and fail fast with a clear message when hub cannot complete import in `ansible/docs/capi-enablement.md` and playbooks README per FR-016 (partial)
+- [x] T062 Idempotently tear down full CAPI/ROSA object set (`ROSAControlPlane`, `ROSACluster`, machine pools, related secrets) for the named cluster in `rosa_deprovision_cluster` before git artifact removal per FR-018 / US5/AC1 (partial)
+
+---
+
+## Phase 11: Convergence
+
+**Purpose**: Close remaining gaps after Phase 10 (converge F1–F3)
+
+- [x] T063 CRITICAL Bridge Helm thin overrides to chart root `enabled` for karpenter/amq-streams (inline Helm values, per-chart value files, or chart templates) so `feature_flags` actually install/absent per FR-009 / US1/AC3 / SC-004 / Constitution VI (partial)
+- [x] T064 Wire survey `node_count` into ROSAControlPlane default machine pool size/replicas in `rosa_apply_capi_cluster` templates so cloud workers match the survey per FR-002 / FR-004 (partial)
+- [x] T065 Regenerate or reconcile existing cluster Argo Applications to sync `<cluster>/capi/` (and write CAPI manifests under that path) so app-of-apps consumes CAPI deploy source per FR-007 / plan: base-values → ACM deploy (partial)

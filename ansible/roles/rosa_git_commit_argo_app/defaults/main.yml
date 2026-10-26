@@ -15,6 +15,11 @@ rosa_git_branch: "{{ lookup('env', 'ROSA_GIT_BRANCH') | default('main', true) }}
 rosa_isolation_label_managed: "rosa-hcp-on-helm/managed"
 rosa_isolation_label_cluster: "rosa-hcp-on-helm/cluster"
 rosa_aws_region: "us-east-1"
+rosa_capi_namespace: "default"
+rosa_ocp_version: ""
+rosa_billing_account: ""
+rosa_aws_identity_kind: "AWSClusterStaticIdentity"
+rosa_aws_identity_name: "rosa-static"
 rosa_allowed_feature_flags:
   - karpenter
   - amq-stream

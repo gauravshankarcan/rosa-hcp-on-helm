@@ -36,25 +36,36 @@ metadata:
 spec:
   rosaClusterName: {{ cluster_name }}
   domainPrefix: {{ cluster_name[:15] | replace('_','') }}
-  version: "{{ ocp_version }}"
+  version: "{{ rosa_ocp_version if (rosa_ocp_version | default('') | length > 0) else ocp_version }}"
   region: {{ rosa_aws_region }}
   channelGroup: stable
   endpointAccess: Public
   credentialsSecretRef:
     name: {{ rosa_ocm_secret_name | default('rosa-creds-secret') }}
   identityRef:
-    kind: AWSClusterControllerIdentity
-    name: default
+    kind: {{ rosa_aws_identity_kind | default('AWSClusterStaticIdentity') }}
+    name: {{ rosa_aws_identity_name | default('rosa-static') }}
+{% if rosa_billing_account | default('') | length > 0 %}
+  billingAccount: "{{ rosa_billing_account }}"
+{% endif %}
 {% if rosa_oidc_config_id | length > 0 %}
   oidcID: {{ rosa_oidc_config_id }}
 {% endif %}
 {% if rosa_installer_role_arn | length > 0 %}
   installerRoleARN: {{ rosa_installer_role_arn }}
+  supportRoleARN: {{ rosa_support_role_arn }}
+  workerRoleARN: {{ rosa_worker_role_arn }}
+{% endif %}
+{% if rosa_control_plane_operator_arn | default('') | length > 0 %}
   rolesRef:
-    installerRoleARN: {{ rosa_installer_role_arn }}
-    supportRoleARN: {{ rosa_support_role_arn }}
-    workerRoleARN: {{ rosa_worker_role_arn }}
-    controlPlaneOperatorARN: {{ rosa_control_plane_operator_arn | default(rosa_installer_role_arn) }}
+    controlPlaneOperatorARN: {{ rosa_control_plane_operator_arn }}
+    imageRegistryARN: {{ rosa_image_registry_arn }}
+    ingressARN: {{ rosa_ingress_arn }}
+    kmsProviderARN: {{ rosa_kms_provider_arn }}
+    kubeCloudControllerARN: {{ rosa_kube_cloud_controller_arn }}
+    networkARN: {{ rosa_network_arn }}
+    nodePoolManagementARN: {{ rosa_node_pool_management_arn }}
+    storageARN: {{ rosa_storage_arn }}
 {% endif %}
 {% if (rosa_subnet_ids | default([])) | length > 0 %}
   subnets:
@@ -73,6 +84,11 @@ spec:
     networkType: OVNKubernetes
   defaultMachinePoolSpec:
     instanceType: {{ rosa_instance_type | default('m5.xlarge') }}
+    # Survey node_count → fixed-size default pools (min=max). Must be a multiple of AZ count when AZs are set.
+    autoscaling:
+      minReplicas: {{ node_count | int }}
+      maxReplicas: {{ node_count | int }}
+
 ---
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
 kind: ROSACluster

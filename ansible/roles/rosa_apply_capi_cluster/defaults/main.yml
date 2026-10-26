@@ -1,6 +1,8 @@
 ---
 cluster_name: ""
 ocp_version: "4.20"
+# Full OpenShift semver for ROSAControlPlane (e.g. 4.21.37); defaults to ocp_version
+rosa_ocp_version: ""
 aws_account_id: ""
 node_count: 3
 rosa_aws_region: "us-east-1"
@@ -11,10 +13,33 @@ rosa_oidc_config_id: ""
 rosa_installer_role_arn: ""
 rosa_support_role_arn: ""
 rosa_worker_role_arn: ""
+rosa_control_plane_operator_arn: ""
+rosa_image_registry_arn: ""
+rosa_ingress_arn: ""
+rosa_kms_provider_arn: ""
+rosa_kube_cloud_controller_arn: ""
+rosa_network_arn: ""
+rosa_node_pool_management_arn: ""
+rosa_storage_arn: ""
+rosa_subnet_ids: []
+rosa_availability_zones: []
+rosa_machine_cidr: "10.0.0.0/16"
+rosa_instance_type: "m5.xlarge"
 rosa_apply_capi_cluster: true
-# Soft-skip when CAPI unavailable, OCM secret missing, or apply rejected
-rosa_apply_capi_soft_skip: true
+# Soft-skip is OFF by default — real provision must apply CAPI or fail (FR-016).
+# Set true only for documented git-only dry-runs (still fails Ready unless rosa_skip_readiness_poll).
+rosa_apply_capi_soft_skip: false
 rosa_capi_available: true
 rosa_ocm_secret_name: "rosa-creds-secret"
 rosa_ocm_secret_namespace: "multicluster-engine"
 rosa_require_ocm_secret: true
+# Require full ROSAControlPlane cloud inputs before apply
+rosa_require_full_capi_inputs: true
+# CRC/non-AWS hubs need StaticIdentity + secret AccessKeyID/SecretAccessKey
+rosa_aws_identity_kind: "AWSClusterStaticIdentity"
+rosa_aws_identity_name: "rosa-static"
+# AWS Marketplace-linked billing account (may differ from infra aws_account_id)
+rosa_billing_account: "{{ lookup('env', 'ROSA_BILLING_ACCOUNT') | default('', true) }}"
+# Also write rendered CAPI YAML under <cluster>/capi/ for Argo/ACM consumption
+rosa_write_capi_git_artifact: true
+rosa_git_repo_path: "{{ playbook_dir }}/../.."

@@ -50,6 +50,17 @@
       ansible.builtin.debug:
         msg: "STEP capi SKIPPED — {{ rosa_capi_skipped_reason }}"
 
+    - name: "STEP capi | Fail closed when CAPI skipped outside dry-run"
+      when: not (rosa_dry_run_git_only | bool)
+      ansible.builtin.fail:
+        msg: >-
+          STEP capi FAILED — CAPI/CAPA cannot be enabled while Hypershift is
+          preserved on this MulticlusterEngine. Use a dedicated CAPI hub, set
+          rosa_force_disable_hypershift=true with rosa_preserve_hypershift=false
+          (destructive to HCP workloads), or set rosa_dry_run_git_only=true for
+          git-only dry-runs (Ready poll will still fail unless
+          rosa_skip_readiness_poll=true). {{ rosa_capi_skipped_reason }}
+
 - name: "STEP capi | Enable/verify CAPI path"
   when: not (
       (rosa_hypershift_enabled | bool)
@@ -120,7 +131,34 @@
                   mode: Enable
               autoApproveUsers:
                 - system:serviceaccount:multicluster-engine:agent-registration-bootstrap
-      failed_when: false
+
+    - name: "STEP capi | Re-read ClusterManager after featureGates patch"
+      kubernetes.core.k8s_info:
+        api_version: operator.open-cluster-management.io/v1
+        kind: ClusterManager
+        name: "{{ rosa_cluster_manager_name }}"
+      register: rosa_cm_after_gates
+
+    - name: "STEP capi | Verify ClusterImporter + ManagedClusterAutoApproval persist"
+      ansible.builtin.assert:
+        that:
+          - rosa_cm_after_gates.resources | length > 0
+          - >
+            rosa_cm_after_gates.resources[0].spec.registrationConfiguration.featureGates
+            | default([])
+            | selectattr('feature', 'equalto', 'ClusterImporter')
+            | selectattr('mode', 'equalto', 'Enable')
+            | list | length > 0
+          - >
+            rosa_cm_after_gates.resources[0].spec.registrationConfiguration.featureGates
+            | default([])
+            | selectattr('feature', 'equalto', 'ManagedClusterAutoApproval')
+            | selectattr('mode', 'equalto', 'Enable')
+            | list | length > 0
+        fail_msg: >-
+          STEP capi FAILED — ClusterManager featureGates ClusterImporter and/or
+          ManagedClusterAutoApproval did not persist as Enable after reconcile.
+          Inspect `oc get clustermanager {{ rosa_cluster_manager_name }} -o yaml`.
 
     - name: "STEP capi | Ensure CAPI registration ClusterRoleBinding"
       kubernetes.core.k8s:

@@ -10,16 +10,92 @@ metadata:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
+  # Hub: sync CAPI/ROSA manifests generated under <cluster>/capi/ (base-values.yaml is metadata only).
   source:
     repoURL: {{ rosa_git_repo_url }}
     targetRevision: {{ rosa_git_branch }}
-    path: {{ cluster_name }}
+    path: {{ cluster_name }}/capi
   destination:
     server: https://kubernetes.default.svc
-    namespace: open-cluster-management
+    namespace: {{ rosa_capi_namespace | default('default') }}
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+{% if (feature_flags | default([]) | intersect(['karpenter']) | length > 0) %}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: rosa-{{ cluster_name }}-karpenter
+  namespace: openshift-gitops
+  labels:
+    {{ rosa_isolation_label_managed }}: "true"
+    {{ rosa_isolation_label_cluster }}: "{{ cluster_name }}"
+    rosa-hcp-on-helm/feature: karpenter
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: {{ rosa_git_repo_url }}
+      targetRevision: {{ rosa_git_branch }}
+      path: helm/charts/karpenter
+      helm:
+        # Root enabled matches chart values.yaml gate (.Values.enabled)
+        values: |
+          enabled: true
+        valueFiles:
+          - $values/{{ cluster_name }}/base-configs/base-values.yaml
+    - repoURL: {{ rosa_git_repo_url }}
+      targetRevision: {{ rosa_git_branch }}
+      ref: values
+  destination:
+    name: {{ cluster_name }}
+    namespace: karpenter
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+{% endif %}
+{% if (feature_flags | default([]) | intersect(['amq-stream']) | length > 0) %}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: rosa-{{ cluster_name }}-amq-streams
+  namespace: openshift-gitops
+  labels:
+    {{ rosa_isolation_label_managed }}: "true"
+    {{ rosa_isolation_label_cluster }}: "{{ cluster_name }}"
+    rosa-hcp-on-helm/feature: amq-stream
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: {{ rosa_git_repo_url }}
+      targetRevision: {{ rosa_git_branch }}
+      path: helm/charts/amq-streams
+      helm:
+        values: |
+          enabled: true
+        valueFiles:
+          - $values/{{ cluster_name }}/base-configs/base-values.yaml
+    - repoURL: {{ rosa_git_repo_url }}
+      targetRevision: {{ rosa_git_branch }}
+      ref: values
+  destination:
+    name: {{ cluster_name }}
+    namespace: amq-streams
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+{% endif %}

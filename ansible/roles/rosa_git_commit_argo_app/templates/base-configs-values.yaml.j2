@@ -1,9 +1,8 @@
 # Thin spoke overrides — chart defaults remain the rich source of knobs.
+# Feature chart root `enabled` is set by Argo Application helm.values when the
+# survey flag selects that chart (Application is only emitted if the flag is set).
+# This file carries shared deltas (workers) for valueFiles merge.
 ---
-karpenter:
-  enabled: {{ (feature_flags | default([]) | intersect(['karpenter']) | length > 0) | lower }}
-amqStreams:
-  enabled: {{ (feature_flags | default([]) | intersect(['amq-stream']) | length > 0) | lower }}
 workers:
   count: {{ node_count | int }}
   nodePools: []

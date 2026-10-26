@@ -1,25 +1,37 @@
 ---
-- name: "STEP ready | Compute effective skip"
+- name: "STEP ready | Detect local CRC hub when unset"
+  when: not (rosa_hub_is_local_crc | bool)
   ansible.builtin.set_fact:
-    rosa_ready_skip_effective: >-
+    rosa_hub_is_local_crc: >-
       {{
-        (rosa_skip_readiness_poll | bool)
-        or (rosa_apply_capi_ocm_missing | default(false) | bool)
-        or (
-          not (rosa_force_readiness_poll | bool)
-          and not (rosa_capi_available | default(true) | bool)
-        )
+        (lookup('env', 'OCP_CENTRAL_SERVER') | default('', true) | regex_search('crc\\.testing') | length > 0)
+        or (lookup('env', 'KUBECONFIG') | default('', true) | regex_search('hub\\.kubeconfig') | length > 0)
       }}
 
-- name: "STEP ready | Skip readiness poll when requested or CAPI/OCM unavailable"
+- name: "STEP ready | Compute effective skip (explicit dry-run only)"
+  ansible.builtin.set_fact:
+    rosa_ready_skip_effective: "{{ rosa_skip_readiness_poll | bool }}"
+
+- name: "STEP ready | Fail closed when CAPI/OCM path left Ready unpollable without skip"
+  when:
+    - not (rosa_skip_readiness_poll | bool)
+    - >
+      (rosa_apply_capi_ocm_missing | default(false) | bool)
+      or (not (rosa_capi_available | default(true) | bool))
+  ansible.builtin.fail:
+    msg: >-
+      STEP ready FAILED: Cannot observe cluster Ready because
+      rosa_capi_available={{ rosa_capi_available | default(true) }} and
+      ocm_missing={{ rosa_apply_capi_ocm_missing | default(false) }}.
+      Fix CAPI/OCM prerequisites, or set rosa_skip_readiness_poll=true only for
+      documented git-only dry-runs (FR-016 / SC-008).
+
+- name: "STEP ready | Skip readiness poll when explicitly requested"
   when: rosa_ready_skip_effective | bool
   ansible.builtin.debug:
     msg: >-
-      STEP ready SKIPPED (effective={{ rosa_ready_skip_effective }},
-      skip_flag={{ rosa_skip_readiness_poll }},
-      rosa_capi_available={{ rosa_capi_available | default(true) }},
-      ocm_missing={{ rosa_apply_capi_ocm_missing | default(false) }},
-      force={{ rosa_force_readiness_poll }})
+      STEP ready SKIPPED (rosa_skip_readiness_poll=true — git-only dry-run).
+      Job will NOT claim Ready success.
 
 - name: "STEP ready | Bounded poll for ManagedCluster Available"
   when: not (rosa_ready_skip_effective | bool)
@@ -46,17 +58,42 @@
       delay: "{{ rosa_readiness_poll_delay_seconds | int }}"
       ignore_errors: true
 
+    - name: "STEP ready | Fail with CRC hub reachability guidance"
+      when:
+        - rosa_hub_is_local_crc | bool
+        - >
+          rosa_mc is failed
+          or rosa_mc.resources | length == 0
+          or (
+            rosa_mc.resources[0].status.conditions
+            | selectattr('type', 'equalto', 'ManagedClusterConditionAvailable')
+            | selectattr('status', 'equalto', 'True')
+            | list
+            | length == 0
+          )
+      ansible.builtin.fail:
+        msg: >-
+          STEP ready FAILED: ManagedCluster '{{ cluster_name }}' did not become
+          Available within {{ rosa_readiness_timeout_minutes }} minutes.
+          On a CRC/local hub, spoke agents cannot resolve api.crc.testing from
+          AWS — Joined/Available may stay Unknown even when the ROSA cluster is
+          ready in OCM. Use a publicly reachable hub API for full import, or
+          verify cloud Ready via `rosa describe cluster -c {{ cluster_name }}`.
+          See ansible/docs/capi-enablement.md (CRC ManagedCluster import).
+
     - name: "STEP ready | Fail with clear timeout if not Ready"
-      when: >
-        rosa_mc is failed
-        or rosa_mc.resources | length == 0
-        or (
-          rosa_mc.resources[0].status.conditions
-          | selectattr('type', 'equalto', 'ManagedClusterConditionAvailable')
-          | selectattr('status', 'equalto', 'True')
-          | list
-          | length == 0
-        )
+      when:
+        - not (rosa_hub_is_local_crc | bool)
+        - >
+          rosa_mc is failed
+          or rosa_mc.resources | length == 0
+          or (
+            rosa_mc.resources[0].status.conditions
+            | selectattr('type', 'equalto', 'ManagedClusterConditionAvailable')
+            | selectattr('status', 'equalto', 'True')
+            | list
+            | length == 0
+          )
       ansible.builtin.fail:
         msg: >-
           STEP ready FAILED: Cluster '{{ cluster_name }}' did not become Available

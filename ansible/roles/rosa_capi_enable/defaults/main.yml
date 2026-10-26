@@ -4,8 +4,10 @@ rosa_mce_namespace: "multicluster-engine"
 rosa_cluster_manager_name: "cluster-manager"
 rosa_capi_verify_retries: 30
 rosa_capi_verify_delay: 20
-# Protect existing Hosted Control Plane estates (this hub uses Hypershift).
+# Protect existing Hosted Control Plane estates when true.
 rosa_preserve_hypershift: true
 rosa_force_disable_hypershift: false
 # When Hypershift is enabled and preserve=true, skip CAPI enable (MCE exclusivity).
 rosa_capi_skip_on_hypershift_conflict: true
+# Git-only dry-run: allow continuing without CAPI (Ready still fails unless skipped).
+rosa_dry_run_git_only: false

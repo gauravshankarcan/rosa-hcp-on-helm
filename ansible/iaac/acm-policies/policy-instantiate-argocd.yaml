@@ -28,3 +28,52 @@ spec:
                 kind: Namespace
                 metadata:
                   name: openshift-gitops
+                  labels:
+                    rosa-hcp-on-helm/managed: "true"
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: rosa-hcp-on-helm-argocd-operator
+        spec:
+          remediationAction: enforce
+          severity: medium
+          object-templates:
+            # OpenShift GitOps Operator subscription on the spoke (isolation-labeled only via Placement)
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: operators.coreos.com/v1alpha1
+                kind: Subscription
+                metadata:
+                  name: openshift-gitops-operator
+                  namespace: openshift-operators
+                  labels:
+                    rosa-hcp-on-helm/managed: "true"
+                spec:
+                  channel: latest
+                  name: openshift-gitops-operator
+                  source: redhat-operators
+                  sourceNamespace: openshift-marketplace
+                  installPlanApproval: Automatic
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: rosa-hcp-on-helm-gitops-creds-placeholder
+        spec:
+          remediationAction: inform
+          severity: medium
+          object-templates:
+            # Operator must create the real Secret out-of-band (never commit tokens).
+            # Expected name used by spoke Argo Applications for private repos.
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: v1
+                kind: Secret
+                metadata:
+                  name: rosa-hcp-on-helm-git-creds
+                  namespace: openshift-gitops
+                  labels:
+                    rosa-hcp-on-helm/managed: "true"
+                    argocd.argoproj.io/secret-type: repository
+                type: Opaque
