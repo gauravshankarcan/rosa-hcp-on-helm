@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: rosa-typhlosion-lab
+  namespace: openshift-gitops
+  labels:
+    rosa-hcp-on-helm/managed: "true"
+    rosa-hcp-on-helm/cluster: "typhlosion-lab"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/gauravshankarcan/rosa-hcp-on-helm.git
+    targetRevision: main
+    path: typhlosion-lab
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: open-cluster-management
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
