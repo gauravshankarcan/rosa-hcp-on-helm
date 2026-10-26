@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: rosa-verify-rosa-a
+  namespace: openshift-gitops
+  labels:
+    rosa-hcp-on-helm/managed: "true"
+    rosa-hcp-on-helm/cluster: "verify-rosa-a"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/gauravshankarcan/rosa-hcp-on-helm.git
+    targetRevision: main
+    path: verify-rosa-a
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: open-cluster-management
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
