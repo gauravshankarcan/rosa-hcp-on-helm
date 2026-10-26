@@ -1,5 +1,0 @@
-# Thin spoke overrides — chart defaults remain the rich source of knobs.
----
-workers:
-  count: 2
-  nodePools: []
